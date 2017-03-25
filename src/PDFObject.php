@@ -72,7 +72,7 @@ class PDFObject {
 			$headerDictionaryRest = preg_replace(self::HEADER_TOKEN_WHITESPACE, '', $headerDictionaryRest);
 			if(is_null($currentKey)) {
 				if(preg_match(self::HEADER_TOKEN_NAME, $headerDictionaryRest, $matches)) {
-					// the dictionary has a next enxtry
+					// the dictionary has a next entry
 					$currentKey = $matches[0];
 					if(isset($resultArray[$currentKey])) {
 						throw new PDFReaderSyntaxException('The dictionary has duplicated key : ' . $currentKey);
@@ -85,7 +85,8 @@ class PDFObject {
 					break;
 				}
 				else {
-					throw new PDFReaderSyntaxException('A dictionary key should be a name but another token was found.');
+//					var_dump($resultArray);
+					throw new PDFReaderSyntaxException('A dictionary key should be a name but another token was found. First 20 chars : ' . substr($headerDictionaryRest, 0 ,20));
 				}
 			}
 			else {
@@ -114,16 +115,13 @@ class PDFObject {
 					list($value, $headerDictionaryRest) = self::_parseArray($headerDictionaryRest);
 				}
 				else {
-					throw new PDFReaderSyntaxException('Unknown token was found as a dictionary value.');
+					throw new PDFReaderSyntaxException('Unknown token was found as a dictionary value. First 20 chars : ' . substr($headerDictionaryRest, 0 ,20));
 				}
 				
 				$resultArray[$currentKey] = $value;
 				$currentKey = null;
 			}
 		}
-		
-		$headerDictionaryRest = preg_replace(self::HEADER_TOKEN_WHITESPACE, '', $headerDictionaryRest);
-		$headerDictionaryRest = preg_replace(self::HEADER_TOKEN_DICTIONARY_CLOSE, '', $headerDictionaryRest);
 		
 		return array($resultArray, $headerDictionaryRest);
 	}
@@ -161,16 +159,19 @@ class PDFObject {
 			else if(preg_match(self::HEADER_TOKEN_ARRAY_OPEN, $headerDictionaryRest, $matches)) {
 				list($value, $headerDictionaryRest) = self::_parseArray($headerDictionaryRest);
 			}
+			else if(preg_match(self::HEADER_TOKEN_ARRAY_CLOSE, $headerDictionaryRest, $matches)) {
+				// end of the array
+				$headerDictionaryRest = preg_replace(self::HEADER_TOKEN_ARRAY_CLOSE, '', $headerDictionaryRest);
+				break;
+			}
 			else {
-				throw new PDFReaderSyntaxException('Unknown token was found as a dictionary value.');
+//				var_dump($resultArray);
+				throw new PDFReaderSyntaxException('Unknown token was found as an array item. First 20 chars : ' . substr($headerDictionaryRest, 0 ,20));
 			}
 			
 			$resultArray[] = $value;
 			$currentKey = null;
 		}
-		
-		$headerDictionaryRest = preg_replace(self::HEADER_TOKEN_WHITESPACE, '', $headerDictionaryRest);
-		$headerDictionaryRest = preg_replace(self::HEADER_TOKEN_ARRAY_CLOSE, '', $headerDictionaryRest);
 		
 		return array($resultArray, $headerDictionaryRest);
 	}
