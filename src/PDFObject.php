@@ -1,5 +1,5 @@
 <?php
-namespace PDFReader;
+namespace motooka\PDFReader;
 
 class PDFObject {
 	public $rawHeaderDictionary = null;
