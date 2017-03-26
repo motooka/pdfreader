@@ -1,0 +1,111 @@
+<?php
+namespace motooka\PDFReader;
+
+use motooka\PDFReader\Exception\PDFReaderException;
+use motooka\PDFReader\Exception\PDFReaderSyntaxException;
+
+class PDFDocument {
+	public $rawHeader = null;
+	public $version = null;
+	public $objects = null;
+	public $rawXref = null;
+	public $trailerDictionary = null;
+	public $startXref = null;
+	
+	const DOCUMENT_TOKEN_HEADER = '/^%PDF[^\\n]+\\n[^\\n]+\\n/';
+	const DOCUMENT_TOKEN_PDF_VERSION = '/^%PDF-([^\\n]+)\\n/';
+	const DOCUMENT_TOKEN_OBJECT_START = '/^[0-9]+[ ]+[0-9]+[ ]+obj\\n/';
+	const DOCUMENT_TOKEN_OBJECT_END = '/^endobj\\n/';
+	const DOCUMENT_TOKEN_XREF_START = '/^xref\\n/';
+	const DOCUMENT_TOKEN_TRAILER_START = '/^trailer\\n/';
+	const DOCUMENT_TOKEN_STARTXREF_START = '/^startxref\\n';
+	const DOCUMENT_TOKEN_EOF = '/^%%EOF/';
+	const DOCUMENT_LINE = '^[^\\n]\\n';
+	
+	public function __construct($filePath) {
+		if(!file_exists($filePath)) {
+			throw new PDFReaderException('File does not exist : ' . $filePath);
+		}
+		if(is_dir($filePath)) {
+			throw new PDFReaderException('Specified file is a directory : ' . $filePath);
+		}
+		if(!is_readable($filePath)) {
+			throw new PDFReaderException('File cannot be read : ' . $filePath);
+		}
+		$fileSize = filesize($filePath);
+		$pdfStr = file_get_contents($filePath);
+		if($pdfStr === false) {
+			throw new PDFReaderException('Failed to load the file : ' . $filePath);
+		}
+		if(strlen($pdfStr) != $fileSize) {
+			throw new PDFReaderException("File size is incorrect. expected=$fileSize, actual=" . strlen($pdfStr));
+		}
+		
+		$matches = array();
+		
+		// header
+		if(!preg_match(self::DOCUMENT_TOKEN_HEADER, $pdfStr, $matches)) {
+			throw new PDFReaderSyntaxException('Document header not found');
+		}
+		$this->rawHeader = $matches[0];
+		if(preg_match(self::DOCUMENT_TOKEN_PDF_VERSION, $this->rawHeader, $matches)) {
+			$this->version = $matches[1];
+		}
+		$pdfStr = preg_replace(self::DOCUMENT_TOKEN_HEADER, '', $pdfStr);
+		
+		
+		$currentObjectKey = null;
+		$currentContent = null;
+		while(true) {
+			if(is_null($currentObjectKey)) {
+				if(preg_match(self::DOCUMENT_TOKEN_EOF, $pdfStr)) {
+					break;
+				}
+				else if(preg_match(self::DOCUMENT_TOKEN_OBJECT_START, $pdfStr, $matches)) {
+					$currentObjectKey = preg_replace('/\\n/', '', $matches[0]);
+					$pdfStr = preg_replace(self::DOCUMENT_TOKEN_OBJECT_START, '', $pdfStr);
+				}
+				else if(preg_match(self::DOCUMENT_TOKEN_XREF_START, $pdfStr, $matches)) {
+					$currentObjectKey = 'xref';
+					$pdfStr = preg_replace(self::DOCUMENT_TOKEN_XREF_START, '', $pdfStr);
+				}
+				else if(preg_match(self::DOCUMENT_TOKEN_TRAILER_START, $pdfStr, $matches)) {
+					$currentObjectKey = 'trailer';
+					$pdfStr = preg_replace(self::DOCUMENT_TOKEN_TRAILER_START, '', $pdfStr);
+				}
+				else if(preg_match(self::DOCUMENT_TOKEN_STARTXREF_START, $pdfStr, $matches)) {
+					$currentObjectKey = 'startxref';
+					$pdfStr = preg_replace(self::DOCUMENT_TOKEN_STARTXREF_START, '', $pdfStr);
+				}
+				else {
+					throw new PDFReaderSyntaxException('obj/xref/trailer/startxref/eof is expected, but found : ', substr($pdfStr, 0, 20));
+				}
+				$currentContent = null;
+			}
+		}
+		// objects
+		
+		
+		// xref
+		
+		
+		// trailer dictionary
+		
+		
+		// start xref
+		
+		
+		// EOF
+	}
+	
+	protected function _readLine($pdfStr) {
+		$matches = array();
+		if(preg_match(self::DOCUMENT_LINE, $pdfStr, $matches)) {
+			$pdfStr = preg_replace(self::DOCUMENT_LINE, '', $pdfStr);
+			return array($matches[0], $pdfStr);
+		}
+		else {
+			return array($pdfStr, '');
+		}
+	}
+}

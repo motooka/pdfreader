@@ -1,7 +1,6 @@
 <?php
 namespace motooka\PDFReader;
 
-use motooka\PDFReader\Exception\PDFReaderException;
 use motooka\PDFReader\Exception\PDFReaderSyntaxException;
 
 class PDFObject {
