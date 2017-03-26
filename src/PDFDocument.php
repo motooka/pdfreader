@@ -9,6 +9,7 @@ class PDFDocument {
 	public $version = null;
 	public $objects = null;
 	public $rawXref = null;
+	public $rawTrailerDictionary = null;
 	public $trailerDictionary = null;
 	public $startXref = null;
 	
@@ -55,47 +56,87 @@ class PDFDocument {
 		
 		
 		$currentObjectKey = null;
-		$currentContent = null;
+		$currentContent = '';
 		while(true) {
 			if(is_null($currentObjectKey)) {
-				if(preg_match(self::DOCUMENT_TOKEN_EOF, $pdfStr)) {
-					break;
-				}
-				else if(preg_match(self::DOCUMENT_TOKEN_OBJECT_START, $pdfStr, $matches)) {
+				if(preg_match(self::DOCUMENT_TOKEN_OBJECT_START, $pdfStr, $matches)) {
 					$currentObjectKey = preg_replace('/\\n/', '', $matches[0]);
+					if(isset($this->objects[$currentObjectKey])) {
+						throw new PDFReaderSyntaxException('duplicated object : ' . $currentObjectKey);
+					}
+					
 					$pdfStr = preg_replace(self::DOCUMENT_TOKEN_OBJECT_START, '', $pdfStr);
 				}
 				else if(preg_match(self::DOCUMENT_TOKEN_XREF_START, $pdfStr, $matches)) {
-					$currentObjectKey = 'xref';
 					$pdfStr = preg_replace(self::DOCUMENT_TOKEN_XREF_START, '', $pdfStr);
-				}
-				else if(preg_match(self::DOCUMENT_TOKEN_TRAILER_START, $pdfStr, $matches)) {
-					$currentObjectKey = 'trailer';
-					$pdfStr = preg_replace(self::DOCUMENT_TOKEN_TRAILER_START, '', $pdfStr);
-				}
-				else if(preg_match(self::DOCUMENT_TOKEN_STARTXREF_START, $pdfStr, $matches)) {
-					$currentObjectKey = 'startxref';
-					$pdfStr = preg_replace(self::DOCUMENT_TOKEN_STARTXREF_START, '', $pdfStr);
+					break;
 				}
 				else {
-					throw new PDFReaderSyntaxException('obj/xref/trailer/startxref/eof is expected, but found : ', substr($pdfStr, 0, 20));
+					throw new PDFReaderSyntaxException('obj or xref is expected, but found : ', substr($pdfStr, 0, 20));
 				}
-				$currentContent = null;
+				$currentContent = '';
+			}
+			else {
+				if(preg_match(self::DOCUMENT_TOKEN_OBJECT_END, $pdfStr)) {
+					$pdfStr = preg_replace(self::DOCUMENT_TOKEN_OBJECT_END, '', $pdfStr);
+					$this->objects[$currentObjectKey] = $currentContent;
+					$currentObjectKey = null;
+					$currentContent = '';
+					continue;
+				}
+				else {
+					list($line, $pdfStr) = $this->_readLine($pdfStr);
+					if(strlen($pdfStr) <= 0) {
+						throw new PDFReaderSyntaxException('Premature end of PDF file. expected : object content or endobj');
+					}
+					$currentContent .= $line;
+					continue;
+				}
 			}
 		}
-		// objects
-		
 		
 		// xref
-		
+		$this->rawXref = '';
+		while(true) {
+			if(preg_match(self::DOCUMENT_TOKEN_TRAILER_START, $pdfStr)) {
+				preg_replace(self::DOCUMENT_TOKEN_TRAILER_START, '', $pdfStr);
+				break;
+			}
+			list($line, $pdfStr) = $this->_readLine($pdfStr);
+			if(strlen($pdfStr) <= 0) {
+				throw new PDFReaderSyntaxException('EOF detected while parsing xref');
+			}
+			$this->rawXref .= $line;
+		}
 		
 		// trailer dictionary
-		
+		$startXrefPos = strpos($pdfStr, "\nstartxref\n");
+		if($startXrefPos === false) {
+			throw new PDFReaderSyntaxException('startxref not found');
+		}
+		$this->rawTrailerDictionary = substr($pdfStr, 0, $startXrefPos+1);
+		$pdfStr = substr($pdfStr, $startXrefPos+1);
+		$pdfStr = preg_replace(self::DOCUMENT_TOKEN_STARTXREF_START, '', $pdfStr);
+		$this->trailerDictionary = PDFObject::parseHeaderDictionary($this->rawTrailerDictionary);
 		
 		// start xref
-		
+		list($line, $pdfStr) = $this->_readLine($pdfStr);
+		$this->startXref = $line;
 		
 		// EOF
+		if(preg_match(self::DOCUMENT_TOKEN_EOF, $pdfStr)) {
+			// OK
+		}
+		else {
+			throw new PDFReaderSyntaxException('%%EOF expected but found : ' . substr($pdfStr, 0, 20));
+		}
+		
+		// now, we have done to check whole the file.
+		// next, parse the pieces.
+		
+		// TODO parse objects
+		
+		// TODO check the trailer dictionary and build pages array
 	}
 	
 	protected function _readLine($pdfStr) {
